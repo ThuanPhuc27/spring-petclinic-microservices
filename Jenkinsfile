@@ -55,6 +55,7 @@ pipeline {
                     def parallelTests = [:]
 
                     services.each { service ->
+                    
                         parallelTests[service] = {
                             stage("Test: ${service}") {
                                 try {
@@ -87,7 +88,7 @@ pipeline {
                                     echo "📊 Code Coverage for ${service}: ${coverage}%"
                                     coverageResults << "${service}:${coverage}%"
 
-                                    if (coverage >= 0) {
+                                    if (coverage >= 70) {
                                         servicesToBuild << service
                                     }
                                 } catch (Exception e) {
@@ -219,15 +220,9 @@ pipeline {
 
 def getChangedServices() {
 
-    def changedFiles = sh(script: 'git diff --name-only origin/main~1 origin/main', returnStdout: true).trim().split("\n")
+    def changedFiles = sh(script: 'git diff --name-only origin/customers-service origin/customers-service', returnStdout: true).trim().split("\n")
     def services = [
-        'spring-petclinic-admin-server', 
-        'spring-petclinic-config-server',
         'spring-petclinic-customers-service', 
-        'spring-petclinic-discovery-server',
-        'spring-petclinic-genai-service',
-        'spring-petclinic-vets-service',
-        'spring-petclinic-visits-service'
     ]
 
     def affectedServices = services.findAll { service ->
@@ -237,6 +232,7 @@ def getChangedServices() {
     if (affectedServices.isEmpty()) {
         return "NONE"
     }
+    
     echo "Changed services: ${affectedServices.join(', ')}"
     return affectedServices.join(',')
 }
