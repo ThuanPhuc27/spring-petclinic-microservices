@@ -220,7 +220,7 @@ pipeline {
 
 def getChangedServices() {
 
-    def changedFiles = sh(script: 'git diff --name-only origin/customers-service origin/customers-service', returnStdout: true).trim().split("\n")
+    def changedFiles = sh(script: 'git diff --name-only origin/customers-service~1 origin/customers-service', returnStdout: true).trim().split("\n")
     def services = [
         'spring-petclinic-customers-service', 
     ]
@@ -232,7 +232,7 @@ def getChangedServices() {
     if (affectedServices.isEmpty()) {
         return "NONE"
     }
-    
+
     echo "Changed services: ${affectedServices.join(', ')}"
     return affectedServices.join(',')
 }
