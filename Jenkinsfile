@@ -124,6 +124,9 @@ pipeline {
                                 try {
                                     echo "🚀 Building: ${service}"
                                     sh "mvn clean package -pl ${service} -DfinalName=app -DskipTests"
+                                    
+                                    def jarfile = "${service}/target/app.jar"
+                                    archiveArtifacts artifacts: jarfile, fingerprint: true
                                 } catch (Exception e) {
                                     echo "❌ Build failed for ${service}: ${e.getMessage()}"
                                     error("Build failed for ${service}")
