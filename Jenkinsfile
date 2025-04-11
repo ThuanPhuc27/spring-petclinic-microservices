@@ -213,10 +213,14 @@ pipeline {
             sh "docker logout ${REGISTRY_URL}"
         }
         success {
-            echo "CI pipeline run successfully!"
+            updateGitHubCommitStatus name: 'jenkins/spring-petclinic-customers-service', 
+                                  state: 'SUCCESS', 
+                                  context: 'Jenkins CI'
         }
         failure {
-            echo "Build or push failed. Please check the logs."
+            updateGitHubCommitStatus name: 'jenkins/spring-petclinic-customers-service', 
+                                     state: 'FAILURE', 
+                                     context: 'Jenkins CI'
         }
     }
 }
