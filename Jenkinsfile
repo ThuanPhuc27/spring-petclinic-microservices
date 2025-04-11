@@ -63,9 +63,12 @@ pipeline {
                                     sh "mvn jacoco:report -pl ${service}"
 
                                     def reportPath = "${service}/target/site/jacoco/index.html"
+                                    def resultPath = "${service}/target/surefire-reports/*.txt"
+
                                     def coverage = 0
 
                                     if (fileExists(reportPath)) {
+                                        archiveArtifacts artifacts: resultPath, fingerprint: true
                                         archiveArtifacts artifacts: reportPath, fingerprint: true
 
                                         coverage = sh(
@@ -210,19 +213,32 @@ pipeline {
 
     post {
         always {
+            echo 'Cleaning up...'
             sh "docker logout ${REGISTRY_URL}"
         }
         success {
-            updateGitHubCommitStatus name: 'jenkins/spring-petclinic-customers-service', 
-                                  state: 'SUCCESS', 
-                                  context: 'Jenkins CI'
+            publishChecks(
+                name: 'Pipeline Result',
+                title: 'Code Coverage Check Success',
+                status: 'COMPLETED',
+                conclusion: 'SUCCESS',
+                summary: 'Pipeline completed successfully.',
+                detailsURL: env.BUILD_URL
+            )
         }
+
         failure {
-            updateGitHubCommitStatus name: 'jenkins/spring-petclinic-customers-service', 
-                                     state: 'FAILURE', 
-                                     context: 'Jenkins CI'
+            publishChecks(
+                name: 'PipelineResult',
+                title: 'Code Coverage Check Fail',
+                status: 'COMPLETED',
+                conclusion: 'FAILURE', 
+                summary: 'Pipeline failed. Check logs for details.',
+                detailsURL: env.BUILD_URL
+            )
         }
     }
+
 }
 
 def getChangedServices() {
