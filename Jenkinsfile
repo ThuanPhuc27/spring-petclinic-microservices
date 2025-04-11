@@ -218,7 +218,7 @@ pipeline {
         }
         success {
             publishChecks(
-                name: 'Pipeline Result',
+                name: 'PipelineResult',
                 title: 'Code Coverage Check Success',
                 status: 'COMPLETED',
                 conclusion: 'SUCCESS',
