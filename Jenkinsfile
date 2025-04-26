@@ -223,11 +223,9 @@ def getChangedServices() {
     def services = [
         'spring-petclinic-admin-server', 
         'spring-petclinic-config-server',
-        'spring-petclinic-customers-service', 
         'spring-petclinic-discovery-server',
         'spring-petclinic-genai-service',
-        'spring-petclinic-vets-service',
-        'spring-petclinic-visits-service'
+        'spring-petclinic-api-gateway',
     ]
 
     def affectedServices = services.findAll { service ->
