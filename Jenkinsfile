@@ -220,7 +220,7 @@ pipeline {
 
 def getChangedServices() {
 
-    def changedFiles = sh(script: 'git diff --name-only origin/${env.BRANCH_NAME}~1  origin/${env.BRANCH_NAME}', returnStdout: true).trim().split("\n")
+    def changedFiles = sh(script: "git diff --name-only origin/${env.BRANCH_NAME}~1 origin/${env.BRANCH_NAME}", returnStdout: true).trim().split("\n")
     def services = [
         'spring-petclinic-admin-server', 
         'spring-petclinic-config-server',
