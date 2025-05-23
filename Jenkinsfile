@@ -15,14 +15,11 @@ pipeline {
 
                 script {
                     try {
-                        
-                        def gitTag = sh(script: "git describe --tags --always", returnStdout: true).trim()
-                        env.GIT_TAG = gitTag.split("-")[0]
-
-                        echo "Git Tag or Commit: ${env.GIT_TAG}"
+                        def commitId = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        env.GIT_TAG = commitId
+                        echo "using Commit ID: ${env.GIT_TAG}"
                     } catch (Exception e) {
-                        echo "Failed to retrieve Git tag: ${e.getMessage()}"
-                        env.GIT_TAG = "1.0"
+                        error("No Commit ID")
                     }
                 }
             }
@@ -33,8 +30,6 @@ pipeline {
                 script {
                     env.CHANGED_SERVICES = getChangedServices()
                     if (env.CHANGED_SERVICES == "NONE") {
-                        echo "No relevant changes detected. Skipping build."
-                        currentBuild.result = 'ABORTED'
                         error("No relevant changes detected")
                     } else {
                         echo "Detected changes in services: ${env.CHANGED_SERVICES}"
@@ -43,79 +38,13 @@ pipeline {
             }
         }
 
-        stage('Run Unit Test') {
-            when {
-                expression { env.CHANGED_SERVICES && env.CHANGED_SERVICES.trim() }
-            }
-            steps {
-                script {
-                    sh "apt update && apt install -y maven"
-                    def services = env.CHANGED_SERVICES.split(',')
-                    def coverageResults = []
-                    def servicesToBuild = []
-                    def parallelTests = [:]
-
-                    services.each { service ->
-                        parallelTests[service] = {
-                            stage("Test: ${service}") {
-                                try {
-                                    sh "mvn test -pl ${service} -DskipTests=false"
-                                    sh "mvn jacoco:report -pl ${service}"
-
-                                    def reportPath = "${service}/target/site/jacoco/index.html"
-                                    def coverage = 0
-
-                                    if (fileExists(reportPath)) {
-                                        archiveArtifacts artifacts: reportPath, fingerprint: true
-
-                                        coverage = sh(
-                                            script: """
-                                            grep -oP '(?<=<td class="ctr2">)\\d+%' ${reportPath} | head -1 | sed 's/%//'
-                                            """,
-                                            returnStdout: true
-                                        ).trim()
-
-                                        if (!coverage) {
-                                            echo "⚠️ Warning: Coverage extraction failed for ${service}. Setting coverage to 0."
-                                            coverage = 0
-                                        } else {
-                                            coverage = coverage.toInteger()
-                                        }
-                                    } else {
-                                        echo "⚠️ Warning: No JaCoCo report found for ${service}. Setting coverage to 0."
-                                    }
-
-                                    echo "📊 Code Coverage for ${service}: ${coverage}%"
-                                    coverageResults << "${service}:${coverage}%"
-
-                                    if (coverage >= 0) {
-                                        servicesToBuild << service
-                                    }
-                                } catch (Exception e) {
-                                    echo "❌ Error while testing ${service}: ${e.getMessage()}"
-                                }
-                            }
-                        }
-                    }
-
-                    parallel parallelTests
-
-                    env.CODE_COVERAGES = coverageResults.join(', ')
-                    env.SERVICES_TO_BUILD = servicesToBuild.join(',')
-                    echo "Final Code Coverages: ${env.CODE_COVERAGES}"
-                    echo "Services to Build: ${env.SERVICES_TO_BUILD}"
-                }
-            }
-        }
-
-
         stage('Build Services') {
             when {
-                expression { env.SERVICES_TO_BUILD && env.SERVICES_TO_BUILD.trim() }
+                expression { env.CHANGED_SERVICES.trim() }
             }
             steps {
                 script {
-                    def services = env.SERVICES_TO_BUILD.split(',')
+                    def services = env.CHANGED_SERVICES.split(',')
                     def parallelBuilds = [:]
 
                     services.each { service ->
@@ -140,11 +69,11 @@ pipeline {
 
         stage('Build Docker Image') {
             when {
-                expression { env.SERVICES_TO_BUILD && env.SERVICES_TO_BUILD.trim() && env.GIT_TAG }
+                expression { env.CHANGED_SERVICES.trim() && env.GIT_TAG }
             }
             steps {
                 script {
-                    def services = env.SERVICES_TO_BUILD.split(',')
+                    def services = env.CHANGED_SERVICES.split(',')
                     def parallelDockerBuilds = [:]
 
                     services.each { service ->
@@ -178,11 +107,11 @@ pipeline {
 
         stage('Push Docker Image') {
             when {
-                expression { env.SERVICES_TO_BUILD && env.SERVICES_TO_BUILD.trim() && env.GIT_TAG }
+                expression { env.CHANGED_SERVICES.trim() && env.GIT_TAG }
             }
             steps {
                 script {
-                    def services = env.SERVICES_TO_BUILD.split(',')
+                    def services = env.CHANGED_SERVICES.split(',')
                     def parallelDockerPush = [:]
 
                     services.each { service ->
