@@ -1,6 +1,6 @@
 
 pipeline {
-    agent any
+    agent { label 'built-in' }
 
     environment {
         CHANGED_SERVICES = getChangedServices()
