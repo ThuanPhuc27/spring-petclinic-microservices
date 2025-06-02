@@ -40,54 +40,38 @@ pipeline {
             }
         }
 
-        stage('Sonarqube scan') {
+        stage('Synk scan') {
             when {
                 expression { env.CHANGED_SERVICES && env.CHANGED_SERVICES.trim() }
             }
             steps {
                 script {
-                    def sonarConfigs = [
-                        'spring-petclinic-customers-service': [ projectKey: 'SONAR_PROJECTKEY_CUSTOMERS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_CUSTOMERS_SERVICE' ],
-                        'spring-petclinic-vets-service': [ projectKey: 'SONAR_PROJECTKEY_VETS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_VETS_SERVICE' ],
-                        'spring-petclinic-visits-service': [ projectKey: 'SONAR_PROJECTKEY_VISITS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_VISITS_SERVICE' ]
-                        // Thêm các service khác ở đây
-                    ]
-
                     def services = env.CHANGED_SERVICES.split(',')
-                    def parallelSonarScan = [:]
+                    def parallelSnykScans = [:]
 
                     services.each { service ->
-                        def config = sonarConfigs[service]
-                        if (!config) {
-                            error "No SonarQube config defined for service: ${service}"
-                        }
-                        parallelSonarScan[service] = {
-                            stage("Sonarqube Scan: ${service}") {
+                        parallelSnykScans[service] = {
+                            stage("Synk Scan: ${service}") {
                                 withCredentials([
-                                    string(credentialsId: 'SONAR_HOST', variable: 'SONAR_HOST'),
-                                    string(credentialsId: config.tokenCredentialId, variable: 'SONAR_TOKEN'),
-                                    string(credentialsId: config.projectKey, variable: 'SONAR_PROJECTKEY'),
+                                    string(credentialsId: 'SNYK_TOKEN', variable: 'SNYK_TOKEN'),
                                 ])
                                 {
                                     script {
                                             sh """
-                                                docker run --rm \
-                                                    -v ${WORKSPACE}:/usr/src \
-                                                    sonarsource/sonar-scanner-cli:latest \
-                                                    sonar-scanner \
-                                                    -Dsonar.host.url=${SONAR_HOST} \
-                                                    -Dsonar.token=${SONAR_TOKEN} \
-                                                    -Dsonar.projectKey=${SONAR_PROJECTKEY}
-                                                    -Dsonar.branch.target=security-test \
-                                                    -Dsonar.projectBaseDir=${WORKSPACE}/${service}
+                                                docker build --rm --build-arg SNYK_AUTH_TOKEN=${{ secrets.SNYK_TOKEN }} --build-arg OUTPUT_FILENAME="snyk-scan" -t snyk_scan_image -f Dockerfile-snyk ./${service}
+                                                docker run -v ${WORKSPACE}/${service}:/app --name snyk_scan snyk_scan_image
                                             """
+
                                     }
+                                    def resultPath = "${WORKSPACE}/${service}/snyk-scan.html"
+                                    archiveArtifacts artifacts: resultPath, fingerprint: true
+
                                 }
                             }
                         }
                     }
 
-                    parallel parallelSonarScan
+                    parallel parallelSnykScans
 
                 }
             }
