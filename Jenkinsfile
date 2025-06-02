@@ -68,16 +68,20 @@ pipeline {
                                     string(credentialsId: config.tokenCredentialId, variable: 'SONAR_TOKEN'),
                                     string(credentialsId: config.projectKey, variable: 'SONAR_PROJECTKEY'),
                                 ])
-                                dir("${service}") {
-                                    sh """
-                                        docker run --rm \
-                                            -v ${WORKSPACE}:/usr/src \
-                                            sonarsource/sonar-scanner-cli:latest \
-                                            sonar-scanner \
-                                            -Dsonar.host.url=${SONAR_HOST} \
-                                            -Dsonar.token=${SONAR_TOKEN} \
-                                            -Dsonar.projectKey=${SONAR_PROJECTKEY}
-                                    """
+                                {
+                                    script {
+                                            sh """
+                                                docker run --rm \
+                                                    -v ${WORKSPACE}:/usr/src \
+                                                    sonarsource/sonar-scanner-cli:latest \
+                                                    sonar-scanner \
+                                                    -Dsonar.host.url=${SONAR_HOST} \
+                                                    -Dsonar.token=${SONAR_TOKEN} \
+                                                    -Dsonar.projectKey=${SONAR_PROJECTKEY}
+                                                    -Dsonar.branch.target=security-test \
+                                                    -Dsonar.projectBaseDir=${WORKSPACE}/${service}
+                                            """
+                                    }
                                 }
                             }
                         }
@@ -107,6 +111,7 @@ pipeline {
                     
                         parallelTests[service] = {
                             stage("Test: ${service}") {
+                                
                                 try {
                                     sh "mvn test -pl ${service} -DskipTests=false"
                                     sh "mvn jacoco:report -pl ${service}"
@@ -244,9 +249,9 @@ pipeline {
 
                                     docker run --rm -v ${WORKSPACE}:/${service} -v /var/run/docker.sock:/var/run/docker.sock \
                                         aquasec/trivy image --format template --template "@contrib/html.tpl" \
-                                        --output ${WORKSPACE}:${service}/${service}.html ${DOCKER_IMAGE_BASENAME}/${service}:${env.GIT_TAG}
+                                        --output /${service}/${service}.html ${DOCKER_IMAGE_BASENAME}/${service}:${env.GIT_TAG}
                                 """
-                                def resultPath = "${WORKSPACE}:${service}/${service}.html"
+                                def resultPath = "${WORKSPACE}/${service}.html"
                                 archiveArtifacts artifacts: resultPath, fingerprint: true
                             }
                         }
