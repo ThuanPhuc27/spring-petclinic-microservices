@@ -40,6 +40,57 @@ pipeline {
             }
         }
 
+        stage('Sonarqube scan') {
+            when {
+                expression { env.CHANGED_SERVICES && env.CHANGED_SERVICES.trim() }
+            }
+            steps {
+                script {
+                    def sonarConfigs = [
+                        'spring-petclinic-customers-service': [ projectKey: 'SONAR_PROJECTKEY_CUSTOMERS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_CUSTOMERS_SERVICE' ],
+                        'spring-petclinic-vets-service': [ projectKey: 'SONAR_PROJECTKEY_VETS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_VETS_SERVICE' ],
+                        'spring-petclinic-visits-service': [ projectKey: 'SONAR_PROJECTKEY_VISITS_SERVICE', tokenCredentialId: 'SONAR_TOKEN_VISITS_SERVICE' ]
+                        // Thêm các service khác ở đây
+                    ]
+
+                    def services = env.CHANGED_SERVICES.split(',')
+                    def parallelSonarScan = [:]
+
+                    services.each { service ->
+                        def config = sonarConfigs[service]
+                        if (!config) {
+                            error "No SonarQube config defined for service: ${service}"
+                        }
+                        parallelSonarScan[service] = {
+                            stage("Sonarqube Scan: ${service}") {
+                                withCredentials([
+                                    string(credentialsId: 'SONAR_HOST', variable: 'SONAR_HOST'),
+                                    string(credentialsId: config.tokenCredentialId, variable: 'SONAR_TOKEN'),
+                                    string(credentialsId: config.projectKey, variable: 'SONAR_PROJECTKEY'),
+                                ])
+                                dir("${service}") {
+                                    sh """
+                                        docker run --rm \
+                                            -v ${WORKSPACE}:/usr/src \
+                                            sonarsource/sonar-scanner-cli:latest \
+                                            sonar-scanner \
+                                            -Dsonar.host.url=${SONAR_HOST} \
+                                            -Dsonar.token=${SONAR_TOKEN} \
+                                            -Dsonar.projectKey=${SONAR_PROJECTKEY}
+                                    """
+                                }
+                            }
+                        }
+                    }
+
+                    parallel parallelSonarScan
+
+                }
+            }
+        }
+
+
+
         stage('Run Unit Test') {
             when {
                 expression { env.CHANGED_SERVICES && env.CHANGED_SERVICES.trim() }
@@ -169,6 +220,39 @@ pipeline {
                     }
 
                     parallel parallelDockerBuilds
+                }
+            }
+        }
+
+        stage('Trivy_Image_Scan') {
+            when {
+                expression { env.SERVICES_TO_BUILD && env.SERVICES_TO_BUILD.trim() && env.GIT_TAG }
+            }
+            steps {
+
+                script {
+                    def services = env.SERVICES_TO_BUILD.split(',')
+                    def parallelImageScan = [:]
+
+                    services.each { service ->
+                        parallelImageScan[service] = {
+                            stage("Scan image: ${service}") {
+                                sh """
+                                    docker run --rm -v ${WORKSPACE}:/${service} -v \
+                                        /var/run/docker.sock:/var/run/docker.sock \
+                                        aquasec/trivy image --download-db-only
+
+                                    docker run --rm -v ${WORKSPACE}:/${service} -v /var/run/docker.sock:/var/run/docker.sock \
+                                        aquasec/trivy image --format template --template "@contrib/html.tpl" \
+                                        --output ${WORKSPACE}:${service}/${service}.html ${DOCKER_IMAGE_BASENAME}/${service}:${env.GIT_TAG}
+                                """
+                                def resultPath = "${WORKSPACE}:${service}/${service}.html"
+                                archiveArtifacts artifacts: resultPath, fingerprint: true
+                            }
+                        }
+                    }
+
+                    parallel parallelImageScan 
                 }
             }
         }
